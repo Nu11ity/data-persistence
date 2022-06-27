@@ -16,11 +16,16 @@ public class DataPersistenceManager : MonoBehaviour
     [SerializeField] private string fileName;
     [SerializeField] private bool useEncryption;
 
+    [Header("Auto Saving Configuration")]
+    [SerializeField] private float autoSaveTimeSeconds = 60f;
+
     private GameData gameData;
     private List<IDataPersistence> dataPersistenceObjects;
     private FileDataHandler dataHandler;
 
     private string selectedProfileId = "";
+
+    private Coroutine autoSaveCoroutine;
 
     public static DataPersistenceManager instance { get; private set; }
 
@@ -42,12 +47,7 @@ public class DataPersistenceManager : MonoBehaviour
 
         this.dataHandler = new FileDataHandler(Application.persistentDataPath, fileName, useEncryption);
 
-        this.selectedProfileId = dataHandler.GetMostRecentlyUpdatedProfileId();
-        if(overrideSelectedProfileId)
-        {
-            this.selectedProfileId = testSelectedProfileId;
-            Debug.LogWarning("Overrode selected profile id with test id: " + testSelectedProfileId);
-        }
+        InitializeSelectedProfileId();
     }
 
     private void OnEnable()
@@ -64,6 +64,13 @@ public class DataPersistenceManager : MonoBehaviour
     {
         this.dataPersistenceObjects = FindAllDataPersistenceObjects();
         LoadGame();
+
+        // start up the auto saving coroutine
+        if(autoSaveCoroutine != null)
+        {
+            StopCoroutine(autoSaveCoroutine);
+        }
+        autoSaveCoroutine = StartCoroutine(AutoSave());
     }
 
     public void ChangeSelectedProfileId(string newProfileId)
@@ -72,6 +79,26 @@ public class DataPersistenceManager : MonoBehaviour
         this.selectedProfileId = newProfileId;
         // Load the game, which will use that profile, updating our game data accordingly
         LoadGame();
+    }
+
+    public void DeleteProfileData(string profileId)
+    {
+        // delete the data for this profile id
+        dataHandler.Delete(profileId);
+        // initialize the selected profile id
+        InitializeSelectedProfileId();
+        // reload the game so that our data matches the newly selected profile id
+        LoadGame();
+    }
+
+    private void InitializeSelectedProfileId()
+    {
+        this.selectedProfileId = dataHandler.GetMostRecentlyUpdatedProfileId();
+        if (overrideSelectedProfileId)
+        {
+            this.selectedProfileId = testSelectedProfileId;
+            Debug.LogWarning("Overrode selected profile id with test id: " + testSelectedProfileId);
+        }
     }
 
     public void NewGame()
@@ -157,5 +184,15 @@ public class DataPersistenceManager : MonoBehaviour
     public Dictionary<string, GameData> GetAllProfilesGameData()
     {
         return dataHandler.LoadAllProfiles();
+    }
+
+    private IEnumerator AutoSave()
+    {
+        while (true)
+        {
+            yield return new WaitForSeconds(autoSaveTimeSeconds);
+            SaveGame();
+            Debug.Log("Auto Saved Game");
+        }
     }
 }
